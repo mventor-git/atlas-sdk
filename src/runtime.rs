@@ -11,7 +11,7 @@ use std::rc::Rc;
 use crate::cluster::{Cluster, ClusterRelation};
 use crate::context::{Context, Platform};
 use crate::error::{SdkError, SdkResult};
-use crate::identity::{Authority, ContractDecl, ContractId, Event, Version};
+use crate::identity::{Authority, ContractDecl, ContractId, Event, EventDecl, Version};
 use crate::manifest::Manifest;
 use crate::plugin::Plugin;
 use crate::value::Value;
@@ -393,6 +393,26 @@ impl Runtime {
             }
         }
         out
+    }
+
+    /// Exact contract identities and versions this runtime offers, in discovery
+    /// order. Derived from the manifests, so a Connect peer discovers what the
+    /// registry actually holds rather than what a host claimed it would hold.
+    /// Observation only.
+    pub fn offered_contracts(&self) -> Vec<ContractDecl> {
+        self.entries
+            .iter()
+            .flat_map(|e| e.manifest.contracts_provided.iter().cloned())
+            .collect()
+    }
+
+    /// Exact event identities the registered plugins declared, in discovery
+    /// order. The event half of `offered_contracts`, and observation only.
+    pub fn subscribed_events(&self) -> Vec<EventDecl> {
+        self.entries
+            .iter()
+            .flat_map(|e| e.manifest.subscriptions.iter().cloned())
+            .collect()
     }
 }
 

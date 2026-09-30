@@ -41,6 +41,19 @@ pub enum SdkError {
     UnknownClusterMember { cluster: String, member: String },
     /// A relationship the cluster declared does not hold against the manifests.
     UnmetClusterRelation { cluster: String, detail: String },
+    /// Two hosts could not be linked from what they advertised.
+    InvalidLink { host: String, reason: String },
+    /// The two ends of a link do not speak the same link version. Refused,
+    /// never half-understood.
+    UnsupportedLinkVersion { declared: String, supported: String },
+    /// A peer was asked for something at a version it did not advertise.
+    /// Refused, never silently coerced to a version that happens to be on offer.
+    VersionNotOffered {
+        peer: String,
+        subject: String,
+        requested: String,
+        available: Vec<String>,
+    },
     /// A caller invoked a capability it does not hold authority for.
     Unauthorized {
         principal: String,
@@ -104,6 +117,23 @@ impl fmt::Display for SdkError {
             SdkError::UnmetClusterRelation { cluster, detail } => {
                 write!(f, "cluster '{cluster}' relationship unmet: {detail}")
             }
+            SdkError::InvalidLink { host, reason } => {
+                write!(f, "invalid connect link for host '{host}': {reason}")
+            }
+            SdkError::UnsupportedLinkVersion { declared, supported } => write!(
+                f,
+                "connect link speaks version {declared} which this host does not support (supported: {supported})"
+            ),
+            SdkError::VersionNotOffered {
+                peer,
+                subject,
+                requested,
+                available,
+            } => write!(
+                f,
+                "host '{peer}' does not offer '{subject}' v{requested} (offered: [{}])",
+                available.join(", ")
+            ),
             SdkError::Unauthorized { principal, capability } => write!(
                 f,
                 "principal '{principal}' is not authorized for capability '{capability}'"

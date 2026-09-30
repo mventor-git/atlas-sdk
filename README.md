@@ -13,7 +13,9 @@ discover -> validate -> register -> initialize -> expose capability
   -> shutdown
 ```
 
-Everything else is deliberately absent until a real requirement demands it.
+and, on top of that loop, one inter-host link with an explicit authority
+relationship. Everything else is deliberately absent until a real requirement
+demands it.
 
 ## Run it
 
@@ -21,7 +23,7 @@ Everything else is deliberately absent until a real requirement demands it.
 cargo run                                  # the demo host, nine steps in order
 cargo run -- --with-python                 # same, plus a plugin written in Python
 cargo run --bin atlas-conformance -- python plugins/py/pricing.py
-cargo test                                 # 78 tests
+cargo test                                 # 90 tests
 cargo clippy --all-targets -- -D warnings
 ```
 
@@ -127,6 +129,72 @@ assertion: the same two plugins run once ungrouped and once grouped, and every
 observable the runtime offers — ids, contracts, capabilities, contract response,
 audit trail, logs, shutdown order — is byte-identical.
 
+## Connect: two hosts, one link, explicit authority
+
+`src/connect.rs` links two Atlas hosts. It owns the mechanics of a link and the
+authority relationship across it, and it owns no meaning at all: it never reads
+a payload, never learns what a contract is for, and never authorises anything.
+The receiving host authorises, from the capabilities its own plugins declared.
+
+```rust
+let (mine, theirs) = (
+    Peer::advertise("host-a@atlas", Version::new(1, 0, 0), &host_a),
+    Peer::advertise("host-b@atlas", Version::new(1, 0, 0), &host_b),
+);
+let link = Link::open(mine, theirs, Role::Master, Authority::new(
+    "host-a@atlas",
+    vec!["relay.compute".into()],
+))?;
+
+link.invoke(&host_b, &ContractId::new("relay.compute"), Version::new(1, 0, 0), payload)?;
+link.publish(&host_b, &Event::new("relay.signal", 1, payload))?;
+```
+
+`Peer::advertise` reads a host's contracts and subscriptions out of that host's
+own registry, so discovery reports what the runtime holds rather than what a
+host claimed it would hold. `Link::open` is the handshake and it refuses five
+things: an unusable identity on either end, a host handed itself as its own
+peer, two ends speaking different link versions, authority presented under a
+name the local host does not hold, and a reader handed a grant.
+
+**The authority relationship is a `Role` and an `Authority`.** `Role` is
+`Master`, `Proposer` or `Reader` — what a host can say about another host
+without knowing what either of them does. `Authority` is the ordinary SDK
+`Authority { principal, granted }`, and the `granted` list is what the receiving
+host chose to hand over. The one standing Connect acts on is the reader: it
+holds no grants, so a reader cannot be built holding one and is refused by the
+receiving host on every operation. What master and proposer *mean* is the host's
+own policy, and is deliberately not encoded here.
+
+**Enforcement is at the receiving end, and the tests say so from the receiver's
+side of the fence.** The same contract on the same link, granted and not
+granted: the granted call runs; the ungranted one is refused with
+`Unauthorized` naming the *receiving* host's own declared capability, its handler
+never runs, its audit trail never records a call, and the sender's own trail
+stays empty because the decision was not the sender's to make. A payload that
+asserts its own contract, version, principal and grant changes nothing.
+
+**Versions are negotiated exactly, never coerced.** A host offering
+`relay.compute` v1.0.0 refuses a request for v2.0.0 with
+`VersionNotOffered`, and says what *was* on offer. Same discipline as a required
+contract in a single host.
+
+| Connect criterion | Where |
+|---|---|
+| Two hosts, discovery, handshake, identity, version negotiation | `connect.rs::criterion_01_...` (three tests, incl. a mismatched link version and a link that may not speak for another host) |
+| An explicit authority relationship, roles expressible | `criterion_02_...` |
+| Authorization enforced *at the receiving host* | `criterion_03_authorization_is_enforced_at_the_receiving_host` |
+| Identity and version preserved; mismatch refused | `criterion_04_...` (two tests) |
+| No domain meaning; Connect never reads a payload | `criterion_05_connect_routes_a_payload_without_interpreting_it`, `invariants.rs::invariant_10_...`, `invariant_11_...` |
+| Recorded run of handshake + authorized + refused | `evidence_two_host_handshake_authorized_exchange_and_refusal` (prints the run) |
+
+Two hosts here are two `Runtime` instances in one process. The architectural
+claim being proved is the authority model, and a socket would have proved the
+same claim with an IPC layer attached. `PROTOCOL.md` is unchanged and no
+protocol version was bumped: Connect is a different boundary from the plugin
+boundary, and a plugin neither imports `connect.rs` nor is reachable through a
+link.
+
 ## How the guarantees are enforced
 
 **No plugin-to-plugin coupling.** A plugin receives exactly one thing: a
@@ -181,6 +249,7 @@ protocol/PROTOCOL.md    the authoritative plugin boundary
 src/
   protocol.rs           the wire protocol, versioned and enforced
   bridge.rs             the Rust binding: ForeignPlugin -> Plugin
+  connect.rs            the inter-host link and its authority relationship
   json.rs               minimal JSON codec over Value
   bin/conformance.rs    the conformance suite, a single command
   error.rs              typed, deterministic refusals
@@ -194,11 +263,13 @@ src/
   plugins/              one file per native plugin, on purpose
     inventory.rs          provides inventory.reserve
     orders.rs             requires it, subscribes to order.placed
+    relay.rs              the far host of a Connect link: relay.compute, relay.signal
 plugins/py/pricing.py  the reference binding, in another language
 tests/
   fundamental_loop.rs
   cross_language.rs
   clusters.rs
+  connect.rs
 ```
 
 ## Known limits
@@ -207,6 +278,22 @@ tests/
   need `Arc<Mutex<..>>`. Marked `ponytail` in `context.rs`.
 - Event delivery is in-process only. No durable outbox, no retries, no
   cross-host transport. All of that is deferred by contract, not by oversight.
+- **Connect has no transport.** A link is two `Runtime` instances in one
+  process, handed to each other. No socket, no broker, no retry, no
+  redelivery, no reconciliation of state between hosts, and no authentication:
+  a host's identity is carried, not verified, because verifying it is a
+  transport concern. Marked `ponytail` in `connect.rs`. The upgrade path is the
+  same `Peer`/`Link` surface over a real transport — nothing above that module
+  knows how a link is carried.
+- **`Master` and `Proposer` carry the same mechanics.** Both may hold grants and
+  both are served by the receiving host; what their proposals *mean* is the
+  host's own policy, so the SDK does not encode it. Only `Reader` has an
+  enforced meaning (no grants), because that is the one distinction a host can
+  make about another host without knowing what either of them does.
+- **Discovery reports declared surface only.** `orders` binds its `order.placed`
+  subscription through `Plugin::subscriptions` rather than declaring it in its
+  manifest, so a host running it advertises no events. What a peer discovers is
+  what the manifests declare, not what is bound.
 - `Value` cannot represent every JSON document, and `src/json.rs` has no
   streaming or exponent handling. `serde_json` is the upgrade path.
 - **A foreign plugin cannot invoke another contract mid-call.** The protocol is

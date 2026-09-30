@@ -6,3 +6,4 @@
 
 pub mod inventory;
 pub mod orders;
+pub mod relay;

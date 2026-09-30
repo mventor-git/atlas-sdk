@@ -14,6 +14,7 @@
 
 pub mod bridge;
 pub mod cluster;
+pub mod connect;
 pub mod context;
 pub mod error;
 pub mod identity;
@@ -27,6 +28,7 @@ pub mod value;
 
 pub use bridge::ForeignPlugin;
 pub use cluster::{Cluster, ClusterRelation};
+pub use connect::{Link, Peer, Role, LINK_VERSION, SUPPORTED_LINK_VERSIONS};
 pub use context::Context;
 pub use error::{SdkError, SdkResult};
 pub use identity::{Authority, Capability, ContractDecl, ContractId, Event, EventDecl, Version};

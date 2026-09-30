@@ -9,12 +9,14 @@
 //! Each test names the invariant it defends. If someone changes the SDK in a
 //! way that breaks one, a named test fails.
 //!
-//! Invariant 10 is not yet implemented (Connect does not exist), so it is
-//! recorded as absent rather than claimed as satisfied. An invariant that has
-//! never been violated has also never been tested.
+//! Invariant 10 was recorded as absent for as long as it was absent: the test
+//! asserted that no Connect layer existed and told whoever made that true to
+//! replace it with a real check. Connect now exists, so it is checked — see
+//! `invariant_10_connect_owns_inter_host_mechanics_and_no_meaning`. An
+//! invariant that has never been violated has also never been tested.
 
-use std::cell::Cell;
-use std::path::{Path, PathBuf};
+use std::cell::{Cell, RefCell};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use atlas_sdk::context::ContractFn;
@@ -306,22 +308,133 @@ fn invariant_09_boundary_is_protocol_not_object_model() {
 
 // ---- 10. Connect owns inter-host mechanics --------------------------------
 
-/// Invariant 10 is NOT YET IMPLEMENTED. C-003 is still draft. This test records
-/// the absence honestly rather than asserting a guarantee that does not exist,
-/// and it will start failing loudly the day a Connect module appears so the
-/// claim can then be checked for real.
+/// Invariant 10. Connect owns the mechanics of linking two hosts and the
+/// authority relationship between them, and it owns no meaning at all.
+///
+/// This replaces `invariant_10_connect_layer_is_not_yet_implemented`, which
+/// asserted that no Connect layer existed and instructed whoever made that true
+/// to replace it. That is not weakened by being replaced: the claim it made was
+/// "Connect does not exist", and Connect now exists, so the claim now has to be
+/// "Connect holds these properties" — which is a stronger claim, and one that
+/// can fail.
+///
+/// It is checked by behaviour, not by the file being present. A link is opened,
+/// each standing is carried on it, a reader is refused by the host on the far
+/// side, and the capability the refusal names is read out of that far host's own
+/// manifest. A Connect layer that existed but authorised nothing, or that let a
+/// link grant itself authority, would fail here.
 #[test]
-fn invariant_10_connect_layer_is_not_yet_implemented() {
-    let has_connect = Path::new(&repo().join("src").join("connect.rs")).exists()
-        || source("src/lib.rs").contains("pub mod connect");
+fn invariant_10_connect_owns_inter_host_mechanics_and_no_meaning() {
+    use atlas_sdk::connect::{Link, Peer, Role};
+    use atlas_sdk::plugins::relay::{compute_decl, Relay};
 
-    assert!(
-        !has_connect,
-        "a Connect layer now exists. Invariant 10 has moved from 'not implemented' to \
-         'implemented' and must now be VERIFIED: that it carries authority semantics \
-         (master/reader/proposer) and contains no domain vocabulary. Replace this test \
-         with one that proves that."
+    const LOCAL: &str = "local@atlas";
+    const REMOTE: &str = "remote@atlas";
+
+    let mut local = Runtime::new();
+    local.discover(atlas_sdk::default_system());
+    local.validate().expect("the local host is valid");
+    local
+        .register()
+        .expect("the local host binds its contracts");
+
+    let remote = Rc::new(RefCell::new(Vec::new()));
+    let mut serving = Runtime::new();
+    serving.discover(vec![Box::new(Relay::new(&remote))]);
+    serving.validate().expect("the remote host is valid");
+    // The far host is a running host, not a validated sketch: enforcement below
+    // happens inside it, so it has to be started.
+    serving
+        .register()
+        .expect("the remote host binds its contracts");
+    serving.initialize().expect("the remote host starts");
+
+    let mine = Peer::advertise(LOCAL, Version::new(1, 0, 0), &local);
+    let theirs = Peer::advertise(REMOTE, Version::new(1, 0, 0), &serving);
+
+    // All three standings are expressible on a link, and each is carried by it.
+    for role in [Role::Master, Role::Proposer, Role::Reader] {
+        let link = Link::open(
+            mine.clone(),
+            theirs.clone(),
+            role,
+            Authority::new(LOCAL, vec![]),
+        )
+        .unwrap_or_else(|e| panic!("role {role:?} must be expressible: {e}"));
+        assert_eq!(link.role(), role);
+        assert_eq!(link.local().id, LOCAL);
+        assert_eq!(link.remote().id, REMOTE);
+    }
+
+    // Authority is the receiving host's, not the sender's: the link presents a
+    // grant and the far host's own manifest says whether that grant is good.
+    let granted = Link::open(
+        mine.clone(),
+        theirs.clone(),
+        Role::Proposer,
+        Authority::new(LOCAL, vec!["relay.compute".into()]),
+    )
+    .expect("a link may carry a grant");
+    assert!(granted
+        .invoke(
+            &serving,
+            &compute_decl().id,
+            Version::new(1, 0, 0),
+            Value::Null
+        )
+        .is_ok());
+
+    let ungranted = Link::open(mine, theirs, Role::Proposer, Authority::new(LOCAL, vec![]))
+        .expect("a link may carry no grant");
+    let err = ungranted
+        .invoke(
+            &serving,
+            &compute_decl().id,
+            Version::new(1, 0, 0),
+            Value::Null,
+        )
+        .expect_err("the receiving host must refuse a grant it never declared");
+    assert_eq!(
+        err,
+        SdkError::Unauthorized {
+            principal: LOCAL.into(),
+            // Named by the receiving host's own manifest, so this refusal could
+            // not have come from the sender.
+            capability: "relay.compute".into(),
+        }
     );
+    assert_eq!(
+        remote.borrow().len(),
+        1,
+        "the refused call must not have run on the receiving host: {:?}",
+        remote.borrow()
+    );
+    assert!(serving
+        .audit_records()
+        .iter()
+        .all(|line| !line.contains("relay.unheard_of")));
+
+    // And it carries no meaning. The word list is invariant 11's; it is
+    // repeated here so this test stands on its own if 11 is ever edited.
+    for word in [
+        "attendance",
+        "payroll",
+        "employee",
+        "salary",
+        "invoice",
+        "timesheet",
+        "workforce",
+        "procurement",
+        "tenant",
+        "customer",
+        "ledger",
+    ] {
+        let text = source("src/connect.rs").to_lowercase();
+        assert!(
+            !text.contains(word),
+            "src/connect.rs contains domain vocabulary '{word}' — Connect carries mechanics, not meaning"
+        );
+    }
 }
 
 // ---- 11. The SDK stays smaller than what is built on it -------------------
@@ -350,6 +463,7 @@ fn invariant_11_sdk_carries_no_domain_vocabulary() {
         "src/manifest.rs",
         "src/protocol.rs",
         "src/bridge.rs",
+        "src/connect.rs",
     ] {
         let text = source(path).to_lowercase();
         for word in banned {
