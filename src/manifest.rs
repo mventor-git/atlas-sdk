@@ -3,7 +3,7 @@
 //! Nothing else about a plugin is knowable before it runs. The registry
 //! validates manifests, and only manifests, during `validate`.
 
-use crate::identity::{Capability, ContractDecl};
+use crate::identity::{Capability, ContractDecl, EventDecl};
 
 /// What the plugin wants the SDK to do for it, expressed as lifecycle
 /// behaviour rather than as code the host has to special-case.
@@ -35,6 +35,9 @@ pub struct Manifest {
     pub contracts_provided: Vec<ContractDecl>,
     /// Exact contracts this plugin needs from others.
     pub contracts_required: Vec<ContractDecl>,
+    /// Events this plugin reacts to. Declared, not discovered, so a host can
+    /// reason about the running system before anything fires.
+    pub subscriptions: Vec<EventDecl>,
     /// Explicit, machine-readable capabilities.
     pub capabilities: Vec<Capability>,
     pub lifecycle: Lifecycle,
@@ -47,6 +50,7 @@ impl Manifest {
             version,
             contracts_provided: Vec::new(),
             contracts_required: Vec::new(),
+            subscriptions: Vec::new(),
             capabilities: Vec::new(),
             lifecycle: Lifecycle::Passive,
         }
@@ -59,6 +63,11 @@ impl Manifest {
 
     pub fn requires(mut self, decl: ContractDecl) -> Self {
         self.contracts_required.push(decl);
+        self
+    }
+
+    pub fn subscribes(mut self, decl: EventDecl) -> Self {
+        self.subscriptions.push(decl);
         self
     }
 
@@ -89,6 +98,11 @@ impl Manifest {
         for cap in &self.capabilities {
             if cap.name.trim().is_empty() || cap.requires.trim().is_empty() {
                 return Err("capability name and required authority must both be non-empty".into());
+            }
+        }
+        for event in &self.subscriptions {
+            if event.id.trim().is_empty() {
+                return Err("subscribed event identity must not be empty".into());
             }
         }
         Ok(())
@@ -122,5 +136,13 @@ mod tests {
             ))
             .capability(Capability::new("order.submit", "order.submit"));
         assert!(m.validate().is_ok());
+    }
+
+    #[test]
+    fn rejects_an_empty_subscribed_event_identity() {
+        let m = Manifest::new("alpha", Version::new(1, 0, 0))
+            .provides(ContractDecl::new("x.y", Version::new(1, 0, 0)))
+            .subscribes(crate::identity::EventDecl::new("  ", 1));
+        assert!(m.validate().is_err());
     }
 }

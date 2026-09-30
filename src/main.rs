@@ -20,7 +20,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut runtime = Runtime::with_config(&[("currency", "EGP")]);
 
     // ---- 1. discover -----------------------------------------------------
-    let plugins: Vec<Box<dyn Plugin>> = atlas_sdk::default_system();
+    // The host offers plugins. With --with-python it also offers a plugin
+    // written in another language, over the protocol in protocol/PROTOCOL.md.
+    // No branch below the host mentions Python: the runtime treats it the same.
+    let with_foreign = std::env::args().any(|a| a == "--with-python");
+    let mut plugins = atlas_sdk::default_system();
+    if with_foreign {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("plugins")
+            .join("py")
+            .join("pricing.py");
+        let bridge =
+            atlas_sdk::ForeignPlugin::connect("python", vec![path.to_string_lossy().into_owned()])?;
+        println!(
+            "  loaded '{}' over the plugin protocol",
+            bridge.manifest().id
+        );
+        plugins.push(Box::new(bridge));
+    }
+
     let ids: Vec<String> = plugins.iter().map(|p| p.manifest().id.clone()).collect();
     runtime.discover(plugins);
     step(

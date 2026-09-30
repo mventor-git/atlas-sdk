@@ -17,5 +17,9 @@ path = "src/lib.rs"
 name = "atlas-host"
 path = "src/main.rs"
 
+[[bin]]
+name = "atlas-conformance"
+path = "src/bin/conformance.rs"
+
 [profile.release]
 opt-level = 2

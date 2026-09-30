@@ -12,20 +12,25 @@
 //!   -> shutdown
 //! ```
 
+pub mod bridge;
 pub mod context;
 pub mod error;
 pub mod identity;
+pub mod json;
 pub mod manifest;
 pub mod plugin;
 pub mod plugins;
+pub mod protocol;
 pub mod runtime;
 pub mod value;
 
+pub use bridge::ForeignPlugin;
 pub use context::Context;
 pub use error::{SdkError, SdkResult};
-pub use identity::{Authority, Capability, ContractDecl, ContractId, Event, Version};
+pub use identity::{Authority, Capability, ContractDecl, ContractId, Event, EventDecl, Version};
 pub use manifest::{Lifecycle, Manifest};
 pub use plugin::Plugin;
+pub use protocol::{PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS};
 pub use runtime::{ExposedCapability, Runtime};
 pub use value::Value;
 

@@ -46,6 +46,14 @@ pub enum SdkError {
     HandlerFailed { plugin: String, reason: String },
     /// A lifecycle step ran in a state that does not allow it.
     IllegalState { step: String, detail: String },
+    /// A plugin spoke the protocol incorrectly.
+    ProtocolViolation { detail: String },
+    /// A plugin declared a protocol version this runtime does not support.
+    UnsupportedProtocolVersion { declared: String, supported: String },
+    /// A foreign plugin process could not be started.
+    ForeignPluginSpawn { command: String, reason: String },
+    /// A foreign plugin failed to answer within the deadline.
+    PluginTimeout { command: String, millis: u64 },
 }
 
 impl fmt::Display for SdkError {
@@ -90,6 +98,19 @@ impl fmt::Display for SdkError {
             }
             SdkError::IllegalState { step, detail } => {
                 write!(f, "lifecycle step '{step}' not permitted: {detail}")
+            }
+            SdkError::ProtocolViolation { detail } => {
+                write!(f, "plugin protocol violation: {detail}")
+            }
+            SdkError::UnsupportedProtocolVersion { declared, supported } => write!(
+                f,
+                "plugin speaks protocol version {declared} which this runtime does not support (supported: {supported})"
+            ),
+            SdkError::ForeignPluginSpawn { command, reason } => {
+                write!(f, "could not start foreign plugin '{command}': {reason}")
+            }
+            SdkError::PluginTimeout { command, millis } => {
+                write!(f, "foreign plugin '{command}' did not answer within {millis}ms")
             }
         }
     }

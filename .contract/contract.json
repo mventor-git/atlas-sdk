@@ -16,9 +16,9 @@
     "Prescribing names for future applications, products or deployments. The SDK must stay useful independent of any product identity."
   ],
   "status": "active",
-  "revision": 17,
+  "revision": 19,
   "created_at": "2026-09-29T15:53:10.565Z",
-  "updated_at": "2026-09-30T13:09:24.142Z",
+  "updated_at": "2026-09-30T13:25:05.012Z",
   "authored_by": "CRAKEN",
   "execution_owner": "MVENTOR",
   "change_orders": [],
@@ -109,7 +109,7 @@
       "id": "C-002",
       "title": "Language-independent plugin protocol and conformance suite",
       "description": "The plugin boundary becomes a stable protocol or model with published binding rules and a conformance suite, so a plugin implemented in another technology stays compatible. Invariant 9.",
-      "status": "draft",
+      "status": "in_progress",
       "priority": "medium",
       "effort": "medium",
       "depends_on": [
@@ -144,12 +144,12 @@
       "worker": null,
       "evidence": [],
       "blocked_question": null,
-      "attempts": 0,
+      "attempts": 1,
       "commit_refs": [],
       "execution_notes": [],
-      "revision": 1,
+      "revision": 3,
       "created_at": "2026-09-29T15:53:51.449Z",
-      "updated_at": "2026-09-29T15:53:51.449Z"
+      "updated_at": "2026-09-30T13:25:05.012Z"
     },
     {
       "id": "C-003",

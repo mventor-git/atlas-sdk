@@ -46,6 +46,20 @@ impl Value {
         }
     }
 
+    pub fn as_list(&self) -> Option<&[Value]> {
+        match self {
+            Value::List(items) => Some(items),
+            _ => None,
+        }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Value::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
     /// Convenience for building a small map payload.
     pub fn map(pairs: Vec<(&str, Value)>) -> Self {
         Value::Map(pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
