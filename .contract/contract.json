@@ -16,9 +16,9 @@
     "Prescribing names for future applications, products or deployments. The SDK must stay useful independent of any product identity."
   ],
   "status": "active",
-  "revision": 28,
+  "revision": 33,
   "created_at": "2026-09-29T15:53:10.565Z",
-  "updated_at": "2026-09-30T14:15:10.110Z",
+  "updated_at": "2026-09-30T14:38:36.599Z",
   "authored_by": "CRAKEN",
   "execution_owner": "MVENTOR",
   "change_orders": [],
@@ -225,7 +225,7 @@
       "id": "C-004",
       "title": "Clusters and grouping",
       "description": "Clusters group related plugins and express higher-level composition between groups, without replacing the plugin model and without preventing cross-cluster contracts and events.",
-      "status": "in_progress",
+      "status": "accepted",
       "priority": "medium",
       "effort": "medium",
       "depends_on": [
@@ -253,14 +253,29 @@
         "architecture"
       ],
       "worker": null,
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "ref": "cargo test: 78 passed, 0 failed (29 unit including 4 new cluster tests, 10 in tests/clusters.rs, 12 cross-language, 15 fundamental-loop, 12 invariants). Criterion map: 1 -> criterion_01_a_cluster_groups_plugins_and_the_registry_validates_it; 2 -> criterion_02_declared_relationships_are_checked_against_real_manifests, plus negatives criterion_02_a_shared_capability_a_member_does_not_declare_is_refused and criterion_02_a_dependency_served_from_outside_the_cluster_is_refused; 3 -> criterion_03_a_contract_and_an_event_cross_a_cluster_boundary (asserts on the runtime audit trail, proving both hops) and criterion_03_a_cluster_boundary_does_not_become_an_import; 4 -> criterion_04_an_invalid_cluster_is_refused_deterministically_and_does_not_start, criterion_04_a_cluster_naming_an_undiscovered_plugin_is_refused, criterion_04_duplicate_cluster_identity_is_refused; 5 -> criterion_05_grouping_changes_nothing_a_plugin_can_observe. Unit tests in src/cluster.rs: accepts_a_real_cluster, rejects_a_cluster_that_groups_nothing, rejects_a_member_listed_twice, reports_membership. SABOTAGE CHECK: removing the validate_cluster call from Runtime::validate makes four cluster tests fail (criterion_04_an_invalid_cluster..., criterion_04_a_cluster_naming_an_undiscovered_plugin..., criterion_02_a_shared_capability..., criterion_02_a_dependency_served_from_outside...), so the validation is genuinely load-bearing. All twelve invariants still pass unchanged.",
+          "summary": "cargo test: 78 passed, 0 failed, with 10 new cluster acceptance tests; sabotage-verified that disabling cluster validation fails 4 of them",
+          "recorded_at": "2026-09-30T14:37:12.817Z"
+        },
+        {
+          "kind": "review",
+          "ref": "Commit 1e70129. A cluster is a DECLARATION, not an actor, and the proof is where clusters are absent. The Plugin trait gained nothing. Manifest gained nothing. protocol/PROTOCOL.md is untouched and no protocol version was bumped. Nothing on Context exposes grouping. So a plugin cannot learn it was grouped, and section 16's requirement that clusters not replace the plugin model is a property of the code rather than a promise in a comment. Cluster validation is two-stage inside Runtime::validate, after the manifest and contract checks and before compute_shutdown_order: Cluster::validate does structural checks needing no registry knowledge, and a private validate_cluster checks the declaration against the real manifests. Nothing outside validate reads self.clusters. SABOTAGE-VERIFIED: removing the validate_cluster call makes four cluster tests fail. TWO DELIBERATE DECISIONS, both flagged by the implementer and decided rather than silently absorbed. (1) Criterion 4's \"does not start\" is satisfied by validate-refusal plus a tripwire whose member panics in on_initialize, NOT by gating initialize on validate. Gating initialize would be a general lifecycle change unrelated to clusters, would contradict criterion 5 of this same item, and would break existing accepted tests that register and initialize after a refused validate. The honest claim is that validate refuses and the host stops there. (2) Clusters are deliberately NOT representable in the plugin protocol, so a plugin cannot declare its own cluster. Membership is a host claim about plugins the runtime already holds; making it declarable would need a manifest field, a minor protocol bump, and a Python binding change, all outside this item. Marked ponytail in the source: clusters are flat and single-level, and Runtime::cluster_of returns the first match while membership is neither exclusive nor enforced, each naming its ceiling and upgrade path. No existing SdkError variant was touched, so every asserted error string is unchanged; with no clusters declared the validate path is a no-op, so every pre-existing validate result is byte-identical and all twelve invariants still pass. Also corrects a stale README figure: it claimed 52 tests when the real pre-change count was 64, because C-002 added 12 tests and the README was not updated then. It is now 78 from an actual run.",
+          "summary": "Clusters proven inert: absent from the Plugin trait, Manifest, Context and the wire protocol; two deliberate scope decisions recorded rather than absorbed",
+          "recorded_at": "2026-09-30T14:37:59.800Z"
+        }
+      ],
       "blocked_question": null,
       "attempts": 1,
-      "commit_refs": [],
+      "commit_refs": [
+        "1e70129"
+      ],
       "execution_notes": [],
-      "revision": 3,
+      "revision": 8,
       "created_at": "2026-09-29T15:54:39.075Z",
-      "updated_at": "2026-09-30T14:15:10.110Z"
+      "updated_at": "2026-09-30T14:38:36.599Z"
     }
   ]
 }
