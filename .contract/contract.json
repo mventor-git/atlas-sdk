@@ -16,9 +16,9 @@
     "Prescribing names for future applications, products or deployments. The SDK must stay useful independent of any product identity."
   ],
   "status": "active",
-  "revision": 35,
+  "revision": 42,
   "created_at": "2026-09-29T15:53:10.565Z",
-  "updated_at": "2026-09-30T16:03:06.862Z",
+  "updated_at": "2026-09-30T16:22:38.374Z",
   "authored_by": "CRAKEN",
   "execution_owner": "MVENTOR",
   "change_orders": [],
@@ -178,7 +178,7 @@
       "id": "C-003",
       "title": "Connect layer: multi-host link with explicit authority",
       "description": "The Connect layer connects independent runtime instances: discovery, handshake, identity, authentication, authority, authorization, data exchange, synchronization and version negotiation. Mechanics and authority model only; domain meaning stays in plugins. Invariant 10.",
-      "status": "in_progress",
+      "status": "accepted",
       "priority": "medium",
       "effort": "high",
       "depends_on": [
@@ -212,14 +212,41 @@
         "security"
       ],
       "worker": null,
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "ref": "cargo test: 90 passed, 0 failed, up from 78 with no suite losing a test. Per suite: 32 lib unit (29 + 3 connect), 10 clusters, 9 connect (new), 12 cross-language, 15 fundamental-loop, 12 invariants. Criterion map: 1 -> criterion_01_two_hosts_establish_a_link_by_discovery_and_handshake, with refusals in criterion_01_a_host_on_another_link_version_is_refused and criterion_01_a_link_may_not_speak_for_another_host; 2 -> criterion_02_the_link_carries_an_explicit_authority_relationship (Master, Proposer and Reader each opened and asserted); 3 -> criterion_03_authorization_is_enforced_at_the_receiving_host, which asserts the refusal carries the capability string taken from the REMOTE host's own manifest and that the refused call never ran there; 4 -> criterion_04_contracts_and_events_cross_with_identity_and_version_preserved and criterion_04_a_version_mismatch_is_refused_rather_than_coerced; 5 -> criterion_05_connect_routes_a_payload_without_interpreting_it, where a payload naming its own contract, version, principal and granted is proven inert, plus the invariant_10 and invariant_11 domain-word scans. Evidence clause -> evidence_two_host_handshake_authorized_exchange_and_refusal, whose recorded output is: link host-a@atlas --master--> host-b@atlas (link v1.0.0); host B advertises [relay.compute v1.0.0]; authorized: relay.compute v1.0.0 -> {echo={question=2}, principal=host-a@atlas}; authorized: relay.signal v1 delivered; refused by host B: principal 'host-a@atlas' is not authorized for capability 'relay.compute'; host B saw [\"served relay.compute v1.0.0 principal=host-a@atlas\", \"heard relay.signal v1 principal=host-a@atlas\"]. INDEPENDENT SABOTAGE BY MVENTOR, not merely reported by the worker: widening the presented authority so the link grants itself whatever it asks for — the same bypass shape caught in the earlier invariant-05 audit — makes 5 tests fail, four in tests/connect.rs (criterion_02, criterion_03, criterion_05, evidence_two_host_handshake_authorized_exchange_and_refusal) and, independently, tests/invariants.rs::invariant_10_connect_owns_inter_host_mechanics_and_no_meaning. The invariant caught it with no help from the criterion tests. Reverted, full suite re-run green, no probe residue.",
+          "summary": "cargo test: 90 passed, 0 failed (78 + 12 new); Mventor independently sabotage-verified the receiving-host authority enforcement, 5 tests fail on a self-granting link",
+          "recorded_at": "2026-09-30T16:20:54.063Z"
+        },
+        {
+          "kind": "security",
+          "ref": "Commit efeea68. THE CENTRAL SECURITY CLAIM, ADVERSARIALLY VERIFIED: authority is enforced AT THE RECEIVING HOST, not by the sender. Link::invoke performs exactly one check of its own — VersionNotOffered, a statement about what the peer advertised — then delegates: remote.resolve_contract(&self.grants, contract, version, payload). The receiving runtime applies the same Runtime::required_authority_for check it applies to a local caller, against its own manifest. Mventor sabotaged this by widening the presented authority so a link grants itself whatever it requests, the same bypass shape found during the earlier invariant-05 audit; 5 tests failed, including invariant_10_connect_owns_inter_host_mechanics_and_no_meaning catching it with no help from the criterion tests. IDENTITY IS CARRIED, NOT VERIFIED, and that is stated rather than glossed: a host declares its own id in Peer::advertise. Link::open does prevent a link from presenting another host's identity (criterion_01_a_link_may_not_speak_for_another_host), which is the part Connect can honestly own; authenticating a peer is a transport concern and no transport exists. A LINK NEVER READS A PAYLOAD: authority comes from the Authority value and identity and version from the request, so a payload asserting its own contract, version, principal or granted is inert, proven by criterion_05. VERSION MISMATCH IS REFUSED, NEVER COERCED: a request for v2.0.0 against a peer offering v1.0.0 returns VersionNotOffered listing what was actually offered. Reader HOLDS NO GRANT and is refused by the receiver on every operation, while Master and Proposer are behaviourally identical because the distinction between them is host policy and encoding it in the SDK would be the domain-meaning absorption invariant 5 forbids; a test pins the non-difference so it cannot drift into an accident. No transport, broker, retries, persistence, redelivery, reordering or state reconciliation was built, per section 18. Marked ponytail in src/connect.rs: one in-process link, synchronous, ceiling is that both hosts must share a process and every operation returns before it completes, upgrade path is the same Peer/Link surface over a real transport with enforcement unchanged because it never depended on being in the same address space.",
+          "summary": "Authority verified to be enforced by the receiver, adversarially; identity is explicitly carried-not-verified; payload proven unread; version mismatch refused not coerced",
+          "recorded_at": "2026-09-30T16:21:06.542Z"
+        },
+        {
+          "kind": "api",
+          "ref": "Connect's public surface: connect::{LINK_VERSION, SUPPORTED_LINK_VERSIONS, Peer, Peer::advertise, Role{Master,Proposer,Reader}, Link, Link::open, Link::{local, remote, role, grants, link_version, invoke, publish}}; runtime::{offered_contracts, subscribed_events} as observation-only accessors; lib.rs re-exports Link, Peer, Role, LINK_VERSION, SUPPORTED_LINK_VERSIONS. Three new SdkError variants with stable rendered strings: InvalidLink -> \"invalid connect link for host '{host}': {reason}\", UnsupportedLinkVersion -> \"connect link speaks version {declared} which this host does not support (supported: {supported})\", VersionNotOffered -> \"host '{peer}' does not offer '{subject}' v{requested} (offered: [{available}])\". No existing variant's Display output was touched, so all previously asserted error strings are unchanged. THE ARCHITECTURAL API CLAIM: the SDK core did not change shape to accommodate Connect. No runtime lifecycle method gained a parameter or changed signature, PROTOCOL.md was untouched and no protocol version was bumped, no plugin reaches connect.rs, and the Plugin trait and Context are unchanged — a foreign plugin and a connected host reach plugins through the same identity-based machinery. Documented in README.md including the deliberate non-builds (transport, broker, retries, persistence, redelivery, reordering, reconciliation, authentication), that identity is carried rather than verified, that Master and Proposer are behaviourally identical by design, and that a Link is directed with no return path.",
+          "summary": "Connect adds a small documented surface; no runtime lifecycle signature changed, no protocol version bumped, and no plugin reaches the new module",
+          "recorded_at": "2026-09-30T16:21:17.945Z"
+        },
+        {
+          "kind": "review",
+          "ref": "Commit efeea68. INVARIANT 10 SATISFIED BY BOUNDARY PLACEMENT, not by description. Connect owns inter-host mechanics — discovery, handshake, identity, authority, version negotiation, data exchange — and nothing else. It does not read a payload: authority arrives as an Authority value and identity and version as request fields, so a payload asserting its own contract, version, principal or granted is provably inert (criterion_05). It does not authenticate a peer: identity is CARRIED, not verified, and the README says so plainly rather than implying a guarantee Connect cannot make without a transport. It builds no transport, broker, retries, persistence, redelivery, reordering, state reconciliation or authentication, because section 18 forbids implementing distributed systems merely because the architecture might need them. DISCOVERY CANNOT DRIFT FROM THE REGISTRY: Peer::advertise derives contracts and subscriptions from the host's own Runtime rather than from a host's claim, and the only Runtime changes are two observation-only accessors. THE SDK CORE DID NOT RESHAPE: no lifecycle method changed signature, the Plugin trait and Context are unchanged, PROTOCOL.md was untouched with no protocol version bump, and no plugin reaches connect.rs — a foreign plugin and a connected host reach capabilities through the same identity-based machinery. THE TRIPWIRE WAS REPLACED WITH A REAL CHECK: the old invariant-10 test asserted only that no Connect layer existed, which would have passed for an empty file containing `pub enum Role { A }`. Its replacement opens a real link in each of Master, Proposer and Reader, asserts a granted invoke succeeds while an ungranted one is refused with the capability string taken from the REMOTE's own manifest, proves the refused call never ran at the receiver, and scans src/connect.rs for the eleven banned domain words; src/connect.rs was also added to invariant 11's checked-file list. SABOTAGE-VERIFIED INDEPENDENTLY BY MVENTOR: the receiving-host enforcement was broken by making a link grant itself whatever it requests, and 5 tests failed — four criterion tests plus invariant_10 catching it with no help from them. Reverted, suite green, no probe residue.",
+          "summary": "Invariant 10 satisfied by boundary placement: Connect reads no payload, carries identity without verifying it, builds no transport, and cannot drift from the registry; the invariant-10 tripwire was replaced by a behavioural check",
+          "recorded_at": "2026-09-30T16:22:19.051Z"
+        }
+      ],
       "blocked_question": null,
       "attempts": 1,
-      "commit_refs": [],
+      "commit_refs": [
+        "efeea68"
+      ],
       "execution_notes": [],
-      "revision": 3,
+      "revision": 10,
       "created_at": "2026-09-29T15:54:29.204Z",
-      "updated_at": "2026-09-30T16:03:06.862Z"
+      "updated_at": "2026-09-30T16:22:38.374Z"
     },
     {
       "id": "C-004",
