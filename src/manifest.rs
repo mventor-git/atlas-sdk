@@ -105,6 +105,23 @@ impl Manifest {
                 return Err("subscribed event identity must not be empty".into());
             }
         }
+        // Every provided contract must name the authority required to invoke it.
+        // Without this the runtime would have to invent one, and inventing an
+        // authorization rule is exactly what "capabilities are explicit" forbids:
+        // a provider could otherwise offer a contract that anyone holding a
+        // grant named after the contract could call.
+        for provided in &self.contracts_provided {
+            if !self
+                .capabilities
+                .iter()
+                .any(|c| c.requires == provided.id.to_string())
+            {
+                return Err(format!(
+                    "contract '{}' is provided but no capability declares the authority required to invoke it",
+                    provided.id
+                ));
+            }
+        }
         Ok(())
     }
 }
@@ -117,14 +134,18 @@ mod tests {
     #[test]
     fn rejects_empty_identity() {
         let m = Manifest::new("   ", Version::new(1, 0, 0))
-            .provides(ContractDecl::new("x.y", Version::new(1, 0, 0)));
-        assert!(m.validate().is_err());
+            .provides(ContractDecl::new("x.y", Version::new(1, 0, 0)))
+            .capability(Capability::new("x", "x.y"));
+        assert_eq!(m.validate().unwrap_err(), "identity must not be empty");
     }
 
     #[test]
     fn rejects_manifest_that_declares_nothing() {
         let m = Manifest::new("empty.plugin", Version::new(1, 0, 0));
-        assert!(m.validate().is_err());
+        assert_eq!(
+            m.validate().unwrap_err(),
+            "manifest declares neither contracts provided nor required"
+        );
     }
 
     #[test]
@@ -142,7 +163,11 @@ mod tests {
     fn rejects_an_empty_subscribed_event_identity() {
         let m = Manifest::new("alpha", Version::new(1, 0, 0))
             .provides(ContractDecl::new("x.y", Version::new(1, 0, 0)))
+            .capability(Capability::new("x", "x.y"))
             .subscribes(crate::identity::EventDecl::new("  ", 1));
-        assert!(m.validate().is_err());
+        assert_eq!(
+            m.validate().unwrap_err(),
+            "subscribed event identity must not be empty"
+        );
     }
 }

@@ -134,6 +134,13 @@ impl Context {
 
     /// Publish a fact. Delivery is in-process; subscribers are independent and
     /// nothing here implies a dependency between them.
+    ///
+    /// Publishing to zero subscribers succeeds. A fact that occurred is true
+    /// whether or not anyone is listening, and failing here would make the
+    /// publisher's success depend on the current subscriber set — a hidden
+    /// coupling from publisher to subscribers that the contract forbids.
+    /// Undelivered events are recorded in the audit trail so the situation is
+    /// observable without being fatal.
     pub fn publish(&self, event: &Event) -> SdkResult<()> {
         let key = (event.id.clone(), event.version);
         let targets = self
@@ -144,13 +151,6 @@ impl Context {
             .cloned()
             .unwrap_or_default();
 
-        if targets.is_empty() {
-            return Err(SdkError::NoSubscribers {
-                event: event.id.clone(),
-                version: event.version,
-            });
-        }
-
         self.audit(&format!(
             "publish {} v{} subscribers={} principal={}",
             event.id,
@@ -158,6 +158,14 @@ impl Context {
             targets.len(),
             self.authority.principal
         ));
+
+        if targets.is_empty() {
+            self.audit(&format!(
+                "publish {} v{} had no subscriber; delivered to none",
+                event.id, event.version
+            ));
+            return Ok(());
+        }
 
         for (name, handler) in targets {
             let inner = Context::new(self.authority.clone(), Rc::clone(&self.platform));
@@ -190,16 +198,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn publishing_with_no_subscribers_is_a_deterministic_error() {
+    fn publishing_with_no_subscribers_succeeds_and_is_recorded() {
         let platform = Rc::new(Platform::default());
-        let ctx = Context::new(Authority::new("ops@atlas", vec![]), platform);
+        let ctx = Context::new(Authority::new("ops@atlas", vec![]), Rc::clone(&platform));
         let ev = Event::new("order.created", 1, Value::Null);
-        assert_eq!(
-            ctx.publish(&ev).unwrap_err(),
-            SdkError::NoSubscribers {
-                event: "order.created".into(),
-                version: 1
-            }
+
+        // The fact occurred, so publishing it succeeds whether or not anyone is
+        // listening. Failing here would make the publisher's success depend on
+        // the current subscriber set.
+        ctx.publish(&ev)
+            .expect("an event with no subscribers is still a fact that occurred");
+
+        // A silent drop would be invisible, so it is recorded instead.
+        let audit = platform.audit_records().join("\n");
+        assert!(audit.contains("order.created"), "audit: {audit}");
+        assert!(
+            audit.contains("had no subscriber"),
+            "an undelivered event must be recorded: {audit}"
         );
     }
 

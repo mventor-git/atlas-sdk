@@ -176,6 +176,9 @@ impl Plugin for Duplicate {
 fn duplicate_manifest(id: &str) -> Manifest {
     Manifest::new(id, Version::new(1, 0, 0))
         .provides(ContractDecl::new("dup.provide", Version::new(1, 0, 0)))
+        // Valid manifest: the point of this test is duplicate *identity*, so the
+        // manifests must clear validation and reach the identity check.
+        .capability(Capability::new("dup:provide", "dup.provide"))
 }
 
 /// Criterion 4. The same bad input yields the same message every time, and the

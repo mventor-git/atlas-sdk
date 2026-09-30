@@ -259,8 +259,14 @@ impl Runtime {
     }
 
     /// The authority a caller must hold to invoke this contract: the `requires`
-    /// field of the capability declared alongside it. Falls back to the contract
-    /// identity itself when a provider declares no capability for it.
+    /// field of the capability declared alongside it.
+    ///
+    /// Returns `None` when the provider declared no such capability, and there is
+    /// no fallback. `Manifest::validate` refuses such a manifest, so this is
+    /// unreachable through the normal lifecycle; if `validate` is skipped, the
+    /// correct answer is still to refuse. Naming the contract after itself would
+    /// be inventing an authorization rule the plugin never asked for, and would
+    /// hand the contract to anyone who guessed its name.
     fn required_authority_for(&self, id: &ContractId, version: Version) -> Option<String> {
         self.entries.iter().find_map(|entry| {
             entry
@@ -268,14 +274,13 @@ impl Runtime {
                 .contracts_provided
                 .iter()
                 .find(|d| d.id == *id && d.version == version)
-                .map(|d| {
+                .and_then(|d| {
                     entry
                         .manifest
                         .capabilities
                         .iter()
                         .find(|c| c.requires == d.id.to_string())
                         .map(|c| c.requires.clone())
-                        .unwrap_or_else(|| d.id.to_string())
                 })
         })
     }

@@ -141,7 +141,9 @@ fn criterion_03_python_binding_passes_the_conformance_suite() {
 /// Criterion 3, negative. The suite must be able to fail, or it proves nothing.
 #[test]
 fn criterion_03_suite_rejects_a_nonconformant_plugin() {
-    // A plugin that claims a contract but never answers it.
+    // A structurally valid plugin that claims a contract but never answers it.
+    // The capability is declared so the manifest itself is sound: the refusal
+    // has to come from the contract going unanswered, not from a shape error.
     let script = dir().join("liar.py");
     std::fs::write(
         &script,
@@ -153,7 +155,8 @@ for line in sys.stdin:
                           "manifest": {"id": "liar", "version": "1.0.0",
                                        "contracts_provided": [{"id": "never.served", "version": "1.0.0"}],
                                        "contracts_required": [], "subscriptions": [],
-                                       "capabilities": [], "lifecycle": {"kind": "passive", "order": 0}}}))
+                                       "capabilities": [{"name": "lie", "requires": "never.served"}],
+                                       "lifecycle": {"kind": "passive", "order": 0}}}))
         sys.stdout.flush()
 "#,
     )

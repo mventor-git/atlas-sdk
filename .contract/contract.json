@@ -16,9 +16,9 @@
     "Prescribing names for future applications, products or deployments. The SDK must stay useful independent of any product identity."
   ],
   "status": "active",
-  "revision": 19,
+  "revision": 25,
   "created_at": "2026-09-29T15:53:10.565Z",
-  "updated_at": "2026-09-30T13:25:05.012Z",
+  "updated_at": "2026-09-30T13:46:07.612Z",
   "authored_by": "CRAKEN",
   "execution_owner": "MVENTOR",
   "change_orders": [],
@@ -109,7 +109,7 @@
       "id": "C-002",
       "title": "Language-independent plugin protocol and conformance suite",
       "description": "The plugin boundary becomes a stable protocol or model with published binding rules and a conformance suite, so a plugin implemented in another technology stays compatible. Invariant 9.",
-      "status": "in_progress",
+      "status": "accepted",
       "priority": "medium",
       "effort": "medium",
       "depends_on": [
@@ -142,14 +142,35 @@
         "api"
       ],
       "worker": null,
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "ref": "cargo test: 52 passed, 0 failed (25 unit + 15 fundamental-loop + 12 cross-language in tests/cross_language.rs). Criterion map: 1 -> criterion_01_manifest_is_a_language_neutral_schema (asserts literal JSON field names and shape, then round-trips the manifest back); 2 -> criterion_02_unsupported_protocol_version_is_refused_deterministically plus criterion_02_foreign_plugin_on_a_bad_version_is_refused_before_registration (a real subprocess declaring protocol 7.7.7 is refused during connect); 3 -> criterion_03_python_binding_passes_the_conformance_suite and criterion_03_suite_rejects_a_nonconformant_plugin (a plugin claiming a contract it never serves must be reported NOT CONFORMANT, proving the suite can fail); 4 -> criterion_04_foreign_plugin_participates_in_the_real_runtime, criterion_04_authority_is_enforced_on_a_foreign_contract, criterion_04_foreign_manifest_is_validated_by_the_same_rules, criterion_04_foreign_and_native_plugins_compose, criterion_04_foreign_plugin_shuts_down_and_is_reaped. Plus sdk_core_has_no_foreign_plugin_special_case, which fails if the words foreign, bridge, python or subprocess appear in src/runtime.rs, src/context.rs or src/manifest.rs.",
+          "summary": "cargo test: 52 passed, 0 failed, including 12 cross-language tests covering all five C-002 acceptance criteria",
+          "recorded_at": "2026-09-30T13:45:11.923Z"
+        },
+        {
+          "kind": "review",
+          "ref": "Commit a953351. The boundary is protocol/PROTOCOL.md, authored first and treated as authoritative; src/bridge.rs and plugins/py/pricing.py are implementations of that document, not the other way round. STRUCTURAL PROOF THAT THE BOUNDARY IS A PROTOCOL AND NOT A RUST OBJECT MODEL: sdk_core_has_no_foreign_plugin_special_case scans src/runtime.rs, src/context.rs and src/manifest.rs and fails if the words foreign, bridge, python or subprocess appear in any of them. Those three files were not modified in this commit to accommodate the second language, which is what makes invariant 9 structural rather than aspirational. A foreign plugin is a Box<dyn Plugin> like any other: registered by manifest, validated by the identical duplicate-identity / missing-contract / version rules, resolved by identity through the same Runtime::required_authority_for authority check, given the same Context port, and shut down by the same dependency-depth ordering. With --with-python the demo host composes three plugins and reports shutdown order [\"orders\", \"pricing\", \"inventory\"], correct because pricing requires inventory.reserve. DEFECT FOUND AND FIXED: the first bridge used a blocking read_line, so a plugin that declared a contract and then went silent wedged the host forever; the cross-language suite hung on exactly that case instead of failing. Reading now runs on a dedicated thread feeding a channel and every wait is bounded (5s default, 3s for the suite). Verified: a plugin sleeping 600s is reported NOT CONFORMANT in 3s. Drop now reaps the process so a bridge cannot leak one. Honest limit recorded in both the protocol and the README: a foreign plugin cannot invoke another contract mid-call, because the wire protocol is one request/one response with no correlated reply, making a foreign plugin one hop shallower than a native one.",
+          "summary": "Invariant 9 proven structurally: runtime/context/manifest contain no mention of foreignness; a hang defect (unbounded blocking read) was found and fixed with a bounded reader thread",
+          "recorded_at": "2026-09-30T13:45:26.879Z"
+        },
+        {
+          "kind": "api",
+          "ref": "The public API added is deliberately small: protocol::{PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS, check_protocol_version, hello, manifest_reply, invoke, result, event, ack, read_manifest, read_result, read_event, parse_version}, bridge::{ForeignPlugin, DEFAULT_TIMEOUT, connect, connect_with_timeout, invoke_contract, deliver_event, shutdown, stopped, encode, decode}, and json::{to_json, parse_json}. ForeignPlugin implements the existing Plugin trait, so it adds no new concept to the runtime API: Runtime::discover accepts Box<dyn Plugin> exactly as before and no runtime method changed signature. The authoritative surface is protocol/PROTOCOL.md, which documents every message, the versioning rule, and the limits of v1.0.0 in plain terms; the Rust types are documented as implementations of that document. Manifest gained one field, subscriptions: Vec<EventDecl>, because a plugin must be able to declare the events it reacts to for the wire manifest to carry them — this is a model fix driven by a real requirement, not a redesign, and Manifest::new still constructs a valid empty declaration. Conformance entry point is one command, documented in both PROTOCOL.md and README.md. Errors added: UnsupportedProtocolVersion, ForeignPluginSpawn, PluginTimeout, ProtocolViolation, all with stable rendered strings.",
+          "summary": "Published protocol surface documented in PROTOCOL.md; ForeignPlugin implements the existing Plugin trait so no runtime method changed signature",
+          "recorded_at": "2026-09-30T13:45:39.058Z"
+        }
+      ],
       "blocked_question": null,
       "attempts": 1,
-      "commit_refs": [],
+      "commit_refs": [
+        "a953351"
+      ],
       "execution_notes": [],
-      "revision": 3,
+      "revision": 9,
       "created_at": "2026-09-29T15:53:51.449Z",
-      "updated_at": "2026-09-30T13:25:05.012Z"
+      "updated_at": "2026-09-30T13:46:07.612Z"
     },
     {
       "id": "C-003",
