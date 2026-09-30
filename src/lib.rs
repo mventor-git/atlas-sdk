@@ -13,6 +13,7 @@
 //! ```
 
 pub mod bridge;
+pub mod cluster;
 pub mod context;
 pub mod error;
 pub mod identity;
@@ -25,6 +26,7 @@ pub mod runtime;
 pub mod value;
 
 pub use bridge::ForeignPlugin;
+pub use cluster::{Cluster, ClusterRelation};
 pub use context::Context;
 pub use error::{SdkError, SdkResult};
 pub use identity::{Authority, Capability, ContractDecl, ContractId, Event, EventDecl, Version};

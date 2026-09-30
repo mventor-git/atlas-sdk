@@ -8,6 +8,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
+use crate::cluster::{Cluster, ClusterRelation};
 use crate::context::{Context, Platform};
 use crate::error::{SdkError, SdkResult};
 use crate::identity::{Authority, ContractDecl, ContractId, Event, Version};
@@ -31,6 +32,7 @@ pub struct ExposedCapability {
 
 pub struct Runtime {
     entries: Vec<Entry>,
+    clusters: Vec<Cluster>,
     platform: Rc<Platform>,
     shutdown_order: Vec<String>,
     is_shutdown: bool,
@@ -46,6 +48,7 @@ impl Runtime {
     pub fn new() -> Self {
         Runtime {
             entries: Vec::new(),
+            clusters: Vec::new(),
             platform: Rc::new(Platform::default()),
             shutdown_order: Vec::new(),
             is_shutdown: false,
@@ -61,6 +64,7 @@ impl Runtime {
         }
         Runtime {
             entries: Vec::new(),
+            clusters: Vec::new(),
             platform: Rc::new(platform),
             shutdown_order: Vec::new(),
             is_shutdown: false,
@@ -76,6 +80,14 @@ impl Runtime {
             let manifest = plugin.manifest().clone();
             self.entries.push(Entry { manifest, plugin });
         }
+        self
+    }
+
+    /// Group already-discovered plugins under a name. Metadata only: no plugin
+    /// learns it was grouped, and nothing below reads a cluster except
+    /// `validate`. Declaration order is preserved for observation.
+    pub fn declare_cluster(&mut self, cluster: Cluster) -> &mut Self {
+        self.clusters.push(cluster);
         self
     }
 
@@ -151,6 +163,20 @@ impl Runtime {
                     available,
                 });
             }
+        }
+
+        // A cluster is a claim about the plugins above, checked in the same
+        // pass so an invalid grouping is refused before anything registers or
+        // starts.
+        let mut cluster_ids: BTreeMap<String, ()> = BTreeMap::new();
+        for cluster in &self.clusters {
+            if cluster_ids.contains_key(&cluster.id) {
+                return Err(SdkError::DuplicateClusterId {
+                    id: cluster.id.clone(),
+                });
+            }
+            cluster_ids.insert(cluster.id.clone(), ());
+            validate_cluster(cluster, &self.entries, &providers)?;
         }
 
         // A shutdown order must exist, which also means no dependency cycle.
@@ -344,6 +370,21 @@ impl Runtime {
         self.entries.iter().map(|e| e.manifest.id.clone()).collect()
     }
 
+    /// Declared clusters, in declaration order.
+    pub fn clusters(&self) -> Vec<String> {
+        self.clusters.iter().map(|c| c.id.clone()).collect()
+    }
+
+    /// The cluster a plugin was declared in, or `None` when it is ungrouped.
+    /// Observation only: a plugin cannot reach this, which is what keeps
+    /// grouping from becoming a behaviour.
+    pub fn cluster_of(&self, plugin: &str) -> Option<String> {
+        self.clusters
+            .iter()
+            .find(|c| c.contains(plugin))
+            .map(|c| c.id.clone())
+    }
+
     pub fn contracts(&self) -> Vec<String> {
         let mut out = Vec::new();
         for entry in &self.entries {
@@ -359,6 +400,99 @@ impl Runtime {
 /// authentication; the proof only needs it explicit and inspectable.
 fn host_authority() -> Authority {
     Authority::new("host@atlas", vec!["system.manage".into()])
+}
+
+/// A cluster is validated twice: structurally by `Cluster::validate`, then
+/// against the manifests the registry actually holds. The second half is what
+/// makes a declared relationship a checkable claim rather than a label, and it
+/// is the only place a cluster is consulted — nothing in `register`,
+/// `initialize` or `shutdown` reads one, which is why grouping cannot change
+/// how a plugin behaves.
+fn validate_cluster(
+    cluster: &Cluster,
+    entries: &[Entry],
+    providers: &BTreeMap<ContractDecl, String>,
+) -> SdkResult<()> {
+    cluster
+        .validate()
+        .map_err(|reason| SdkError::InvalidCluster {
+            cluster: cluster.id.clone(),
+            reason,
+        })?;
+
+    let is_member = |id: &str| cluster.members.iter().any(|m| m.as_str() == id);
+
+    for member in &cluster.members {
+        if !entries.iter().any(|e| &e.manifest.id == member) {
+            return Err(SdkError::UnknownClusterMember {
+                cluster: cluster.id.clone(),
+                member: member.clone(),
+            });
+        }
+    }
+
+    for relation in &cluster.relations {
+        let unmet = |detail: String| SdkError::UnmetClusterRelation {
+            cluster: cluster.id.clone(),
+            detail,
+        };
+
+        match relation {
+            ClusterRelation::SharedCapability {
+                capability,
+                members,
+            } => {
+                for member in members {
+                    if !is_member(member) {
+                        return Err(unmet(format!(
+                            "shared capability '{capability}' names '{member}', which is not a member of this cluster"
+                        )));
+                    }
+                    let declares = entries.iter().any(|e| {
+                        e.manifest.id == *member
+                            && e.manifest
+                                .capabilities
+                                .iter()
+                                .any(|c| c.name == *capability)
+                    });
+                    if !declares {
+                        return Err(unmet(format!(
+                            "shared capability '{capability}' is not declared by member '{member}'"
+                        )));
+                    }
+                }
+            }
+            ClusterRelation::DependsOn { member, contract } => {
+                if !is_member(member) {
+                    return Err(unmet(format!(
+                        "declared dependency names '{member}', which is not a member of this cluster"
+                    )));
+                }
+                let requires = entries.iter().any(|e| {
+                    e.manifest.id == *member && e.manifest.contracts_required.contains(contract)
+                });
+                if !requires {
+                    return Err(unmet(format!(
+                        "member '{member}' does not require contract '{}' v{}",
+                        contract.id, contract.version
+                    )));
+                }
+                let Some(provider) = providers.get(contract) else {
+                    return Err(unmet(format!(
+                        "contract '{}' v{} is required by '{member}' but no registered plugin provides it",
+                        contract.id, contract.version
+                    )));
+                };
+                if !is_member(provider) {
+                    return Err(unmet(format!(
+                        "contract '{}' v{} is required by '{member}' but provided by '{provider}', outside this cluster",
+                        contract.id, contract.version
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// A consumer must shut down before the provider it depends on.

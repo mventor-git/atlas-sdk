@@ -21,7 +21,7 @@ Everything else is deliberately absent until a real requirement demands it.
 cargo run                                  # the demo host, nine steps in order
 cargo run -- --with-python                 # same, plus a plugin written in Python
 cargo run --bin atlas-conformance -- python plugins/py/pricing.py
-cargo test                                 # 52 tests
+cargo test                                 # 78 tests
 cargo clippy --all-targets -- -D warnings
 ```
 
@@ -79,6 +79,54 @@ class citizen because there is no second code path for it to take.
 | Second language in the real runtime | `criterion_04_...` (five tests) |
 | SDK core has no foreign special case | `sdk_core_has_no_foreign_plugin_special_case` |
 
+## Clusters and grouping
+
+A cluster groups related plugins. It is a **declaration, not an actor**: it has
+no lifecycle, no callbacks and no handle on the plugins inside it. `Plugin` has
+no cluster method and `Manifest` has no cluster field, so a plugin cannot learn
+it was grouped and its behaviour is identical either way. Only `Runtime::validate`
+reads a cluster.
+
+```rust
+runtime.declare_cluster(
+    Cluster::new("commerce", Version::new(1, 0, 0))
+        .member("inventory")
+        .member("orders")
+        // orders requires inventory.reserve, and a member of this group
+        // provides it: the group is closed over that dependency.
+        .relation(ClusterRelation::depends_on(
+            "orders",
+            ContractDecl::new("inventory.reserve", Version::new(1, 0, 0)),
+        )),
+);
+```
+
+Two relationship kinds are declared, and both are checked against the manifests
+the registry actually holds, so a cluster is a claim that can be refused:
+
+| Relation | Asserts |
+|---|---|
+| `SharedCapability` | every named member declares that capability in its own manifest |
+| `DependsOn` | the member really requires the contract, **and** a member of this same cluster provides it |
+
+Cluster membership is host-side metadata. It is deliberately **not** part of the
+plugin protocol: `PROTOCOL.md` is unchanged, a plugin cannot declare its own
+cluster, and no protocol version was bumped. Clusters group plugins the runtime
+already has.
+
+| Cluster criterion | Where |
+|---|---|
+| A cluster groups plugins and the registry validates it | `clusters.rs::criterion_01_...` |
+| Declared relationships are validated before anything operates | `criterion_02_...` (three tests: both kinds hold, a capability no member declares, a dependency served from outside the group) |
+| Contract and event cross a cluster boundary, with no import | `criterion_03_...` (two tests) |
+| An invalid cluster is refused deterministically and does not start | `criterion_04_...` (three tests) |
+| Grouping changes nothing a plugin can observe | `criterion_05_grouping_changes_nothing_a_plugin_can_observe` |
+
+Criterion 5 is the sharp edge and is proved by comparison rather than by
+assertion: the same two plugins run once ungrouped and once grouped, and every
+observable the runtime offers — ids, contracts, capabilities, contract response,
+audit trail, logs, shutdown order — is byte-identical.
+
 ## How the guarantees are enforced
 
 **No plugin-to-plugin coupling.** A plugin receives exactly one thing: a
@@ -92,6 +140,15 @@ The consumer (`orders`) and the provider (`inventory`) declare the contract
 identity `"inventory.reserve"` **independently**, as strings. They agree by
 name, not by sharing a symbol — a shared constant would have made the
 guarantee worthless.
+
+**Clusters.** A cluster is a declaration the host makes about plugins the runtime
+already has. It adds no lifecycle, no trait method and no manifest field, so a
+plugin cannot observe it. `Runtime::validate` refuses a cluster that is
+structurally invalid, names a member that was never discovered, reuses an
+identity, or declares a relationship that does not hold against the manifests —
+all before anything registers or starts. Nothing outside `validate` reads a
+cluster, which is what makes "grouping changes no plugin behaviour" a property
+of the code rather than a promise about it.
 
 **Authority.** `Authority { principal, granted }` is constructed at the call
 site and carried inside the `Context`. A callee reads `ctx.principal()` during
@@ -130,6 +187,7 @@ src/
   value.rs              minimal payload type
   identity.rs           Version, ContractId, Capability, Authority, Event
   manifest.rs           what a plugin declares
+  cluster.rs            clusters: a grouping declaration, validated and inert
   context.rs            the SDK-defined context port (the only door a plugin has)
   plugin.rs             the Plugin trait
   runtime.rs            the registry and the lifecycle
@@ -140,6 +198,7 @@ plugins/py/pricing.py  the reference binding, in another language
 tests/
   fundamental_loop.rs
   cross_language.rs
+  clusters.rs
 ```
 
 ## Known limits
@@ -157,6 +216,13 @@ tests/
 - Foreign plugins answer within `bridge::DEFAULT_TIMEOUT` (5s). A plugin that
   stalls is abandoned rather than allowed to wedge the host. Verified: a plugin
   sleeping 600s is reported non-conformant in 3s.
+- Clusters are flat and host-declared. No nesting, no cluster-to-cluster
+  relation, and a plugin's group is whatever the host declared — nothing in the
+  plugin model changes, which is the point, but it also means a cluster cannot
+  express "this whole group requires that other group". Cross-cluster contracts
+  and events stay unrestricted; only an explicitly declared `DependsOn` claims
+  its provider is inside the group, because that is the only claim worth
+  refusing.
 
 ## Contract
 

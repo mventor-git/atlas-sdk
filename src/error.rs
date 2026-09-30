@@ -33,6 +33,14 @@ pub enum SdkError {
     /// Contract dependencies between plugins form a cycle, so no shutdown
     /// order exists.
     DependencyCycle { plugins: Vec<String> },
+    /// A cluster declaration is structurally invalid.
+    InvalidCluster { cluster: String, reason: String },
+    /// Two clusters declared the same identity. The second is refused.
+    DuplicateClusterId { id: String },
+    /// A cluster names a plugin identity that was never discovered.
+    UnknownClusterMember { cluster: String, member: String },
+    /// A relationship the cluster declared does not hold against the manifests.
+    UnmetClusterRelation { cluster: String, detail: String },
     /// A caller invoked a capability it does not hold authority for.
     Unauthorized {
         principal: String,
@@ -82,6 +90,19 @@ impl fmt::Display for SdkError {
             ),
             SdkError::DependencyCycle { plugins } => {
                 write!(f, "dependency cycle between plugins: {}", plugins.join(" -> "))
+            }
+            SdkError::InvalidCluster { cluster, reason } => {
+                write!(f, "invalid cluster '{cluster}': {reason}")
+            }
+            SdkError::DuplicateClusterId { id } => {
+                write!(f, "duplicate cluster identity '{id}': already declared, rejected the second")
+            }
+            SdkError::UnknownClusterMember { cluster, member } => write!(
+                f,
+                "cluster '{cluster}' names member '{member}', which was never discovered"
+            ),
+            SdkError::UnmetClusterRelation { cluster, detail } => {
+                write!(f, "cluster '{cluster}' relationship unmet: {detail}")
             }
             SdkError::Unauthorized { principal, capability } => write!(
                 f,
