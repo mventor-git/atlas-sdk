@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "contract_id": "atlas-sdk",
+  "title": "Atlas-SDK",
+  "vision": "Atlas-SDK is a general-purpose application runtime and plugin platform. It owns the orchestration lifecycle — discovery, validation, registration, dependency and contract resolution, initialization, running, shutdown — and is the source of truth for it, so a host does not implement a competing lifecycle, registry or contract system. Plugins are self-contained capability providers that declare stable identity, version, capabilities, contracts provided, contracts required and lifecycle behaviour; the same plugin must run under different Atlas hosts unchanged. Plugins never import or reach into each other. They communicate only through SDK-managed Contracts (stable identity and version, request/response, command/result, query/structured result) and Events (facts that occurred, versioned, many subscribers, no dependency between them). Capabilities are explicit and machine-readable, sufficient to answer what a plugin provides, what a host supports, what activation requires and what permission a capability needs. Plugins receive platform services — authentication/authority, authorization, audit, events, contracts, jobs/execution, configuration, storage, logging, identity — through SDK-defined context ports rather than by reaching into application internals, and execute through an SDK handle carrying the correct execution identity and authority, so a domain plugin carries no host-specific orchestration. The Registry knows the declared structure of the running system (plugins, capabilities, contracts, events, dependencies, versions, runtime state), validates compatibility before anything operates (duplicate identity, missing dependency, missing contract, unsupported contract version, invalid capability or manifest, lifecycle incompatibility), and is deterministic and observable. Event delivery is a platform concern; event meaning is a domain concern — and the implementation stays proportional to actual needs rather than assuming durable distributed infrastructure. The plugin boundary is a stable protocol or model, not a language-specific object model, so a plugin may be implemented in another technology through bindings. The Host bootstraps the SDK, provides environment, loads components and exposes the resulting application surface; it does not redefine the runtime model, and multiple different hosts use the same SDK. The Connect layer handles inter-host mechanics — discovery, handshake, identity, authentication, authority, authorization, data exchange, synchronization, version negotiation — and understands relationships such as master, reader and proposer, but never business meaning. Clusters group related plugins and express higher-level composition without preventing cross-cluster contracts and events. The system is assembled from installed and enabled capabilities rather than from a monolithic application, so small, large and specialised deployments all emerge from the same runtime model. Invariants: the SDK owns orchestration; plugins are modular capability providers; no direct plugin-to-plugin coupling; contracts and events are the official communication mechanisms; capabilities are explicit and machine-readable; lifecycle is SDK-managed; runtime context flows through SDK-defined ports; the host provides the surface but not the runtime model; the boundary is language-independent at the protocol level; Connect owns inter-host mechanics while plugins own domain meaning; the SDK stays smaller and more stable than the systems built on it; the architecture stays capable of applications and deployments not yet imagined. The destination: build the runtime once, build capabilities independently, compose them safely, run them consistently, connect runtimes explicitly. The first implementation proves the architecture through a very small real system, and further infrastructure follows only a real requirement.",
+  "non_goals": [
+    "A business-domain monolith; the SDK must not absorb domain features such as attendance, documents, reporting, payroll, construction workflows or HR policies.",
+    "A collection of unrelated utilities with no shared runtime model.",
+    "A framework where plugins secretly depend on each other through direct imports or hidden service references.",
+    "A host-specific API disguised as a platform.",
+    "A database abstraction that dictates application architecture.",
+    "A hard-coded implementation of one company's workflows.",
+    "Durable or reliable event delivery, outbox patterns, distributed infrastructure, isolation/sandboxing, synchronization and advanced policy machinery are deferred until a real requirement proves the need; each requires a change order.",
+    "Implementing the whole vision at once. Only C-001 is eligible to start; C-002, C-003 and C-004 are gated behind it.",
+    "A shadow contract.md, a second contract system, or any parallel file holding project scope. Scope lives in .contract/contract.json.",
+    "Prescribing names for future applications, products or deployments. The SDK must stay useful independent of any product identity."
+  ],
+  "status": "active",
+  "revision": 7,
+  "created_at": "2026-09-29T15:53:10.565Z",
+  "updated_at": "2026-09-29T16:02:06.557Z",
+  "authored_by": "CRAKEN",
+  "execution_owner": "MVENTOR",
+  "change_orders": [],
+  "items": [
+    {
+      "id": "C-001",
+      "title": "Fundamental loop, in Rust",
+      "description": "A Rust implementation of the Atlas-SDK fundamental loop, end to end, in one host process. Proves the architecture before any infrastructure is added. This is the only eligible item; C-002, C-003 and C-004 are gated behind it.",
+      "status": "ready",
+      "priority": "high",
+      "effort": "high",
+      "depends_on": [],
+      "acceptance": [
+        "A Rust crate runs, in this exact order, one host process executing: discover -> validate -> register -> initialize -> expose capability -> resolve contract -> publish/consume event -> execute with context -> shutdown.",
+        "At least two plugins load, each declaring a manifest containing stable identity, version, contracts provided, capabilities, contracts required, and lifecycle behaviour.",
+        "Plugin A and Plugin B interact only through an SDK-resolved contract and SDK-routed events; the build shows zero imports of B from A (verifiable by dependency direction).",
+        "The registry rejects a plugin with a duplicate identity with a deterministic, reported error, and that plugin is not started.",
+        "Each plugin receives platform services through an SDK-defined context port; no plugin reaches into host internals.",
+        "Execution carries an explicit authority/identity context that is visible to the plugin at call time.",
+        "Shutdown runs in reverse dependency order and is idempotent when invoked repeatedly.",
+        "Evidence: a cargo test suite that drives the whole loop and asserts each step, plus the recorded run output, passes."
+      ],
+      "sources": [
+        {
+          "note": "Sections 3, 4, 5, 6, 7, 8, 10 and 20",
+          "ref": "atlas-sdk-contract-user-29-09-2026",
+          "type": "user"
+        },
+        {
+          "note": "Rust for the first proof",
+          "ref": "2026-09-29 decision during contract intake",
+          "type": "decision"
+        },
+        {
+          "note": "First item limited to the section 20 loop, single language; cross-language and Connect deferred",
+          "ref": "2026-09-29 decision during contract intake",
+          "type": "decision"
+        }
+      ],
+      "skills": [],
+      "capabilities": [],
+      "gates": [
+        "test",
+        "architecture",
+        "api"
+      ],
+      "worker": null,
+      "evidence": [],
+      "blocked_question": null,
+      "attempts": 0,
+      "commit_refs": [],
+      "execution_notes": [],
+      "revision": 2,
+      "created_at": "2026-09-29T15:53:41.555Z",
+      "updated_at": "2026-09-29T16:02:06.557Z"
+    },
+    {
+      "id": "C-002",
+      "title": "Language-independent plugin protocol and conformance suite",
+      "description": "The plugin boundary becomes a stable protocol or model with published binding rules and a conformance suite, so a plugin implemented in another technology stays compatible. Invariant 9.",
+      "status": "draft",
+      "priority": "medium",
+      "effort": "medium",
+      "depends_on": [
+        "C-001"
+      ],
+      "acceptance": [
+        "The plugin manifest, contract and event types are defined as a language-independent schema, not as host-language object types.",
+        "The protocol is versioned, and the runtime refuses a plugin whose declared protocol version is unsupported, with a deterministic reported error.",
+        "A conformance suite exists that a plugin in any language can be run against, and a plugin passing it is accepted by the registry.",
+        "At least one plugin in a language other than Rust is proven to register, participate in a contract and consume an event, without changes to the SDK core.",
+        "Evidence: the conformance suite runs in CI or as a single command, and a second-language plugin passes it, with recorded output."
+      ],
+      "sources": [
+        {
+          "note": "Sections 11 and 19, invariant 9",
+          "ref": "atlas-sdk-contract-user-29-09-2026",
+          "type": "user"
+        },
+        {
+          "note": "Cross-language support explicitly deferred out of C-001",
+          "ref": "2026-09-29 decision during contract intake",
+          "type": "decision"
+        }
+      ],
+      "skills": [],
+      "capabilities": [],
+      "gates": [
+        "test",
+        "architecture",
+        "api"
+      ],
+      "worker": null,
+      "evidence": [],
+      "blocked_question": null,
+      "attempts": 0,
+      "commit_refs": [],
+      "execution_notes": [],
+      "revision": 1,
+      "created_at": "2026-09-29T15:53:51.449Z",
+      "updated_at": "2026-09-29T15:53:51.449Z"
+    },
+    {
+      "id": "C-003",
+      "title": "Connect layer: multi-host link with explicit authority",
+      "description": "The Connect layer connects independent runtime instances: discovery, handshake, identity, authentication, authority, authorization, data exchange, synchronization and version negotiation. Mechanics and authority model only; domain meaning stays in plugins. Invariant 10.",
+      "status": "draft",
+      "priority": "medium",
+      "effort": "high",
+      "depends_on": [
+        "C-001"
+      ],
+      "acceptance": [
+        "Two independent Atlas hosts establish a link through the SDK Connect layer, performing discovery, handshake, identity and version negotiation.",
+        "The link carries an explicit authority relationship, and at least master, reader and proposer roles are expressible without the SDK knowing any business domain.",
+        "Each host enforces authorization on the link from declared SDK capabilities; an operation outside the granted authority is rejected at the receiving host.",
+        "Contracts and events cross the link with their identity and version preserved, and a version mismatch is refused rather than silently coerced.",
+        "The Connect layer contains no domain vocabulary; domain meaning of exchanged data is supplied by plugins.",
+        "Evidence: an integration test exercising the two-host handshake, an authorized exchange, and a rejected unauthorized exchange, with recorded output."
+      ],
+      "sources": [
+        {
+          "note": "Sections 13 and 19, invariant 10",
+          "ref": "atlas-sdk-contract-user-29-09-2026",
+          "type": "user"
+        },
+        {
+          "note": "Two-host Connect handshake explicitly deferred out of C-001",
+          "ref": "2026-09-29 decision during contract intake",
+          "type": "decision"
+        }
+      ],
+      "skills": [],
+      "capabilities": [],
+      "gates": [
+        "test",
+        "architecture",
+        "security"
+      ],
+      "worker": null,
+      "evidence": [],
+      "blocked_question": null,
+      "attempts": 0,
+      "commit_refs": [],
+      "execution_notes": [],
+      "revision": 1,
+      "created_at": "2026-09-29T15:54:29.204Z",
+      "updated_at": "2026-09-29T15:54:29.204Z"
+    },
+    {
+      "id": "C-004",
+      "title": "Clusters and grouping",
+      "description": "Clusters group related plugins and express higher-level composition between groups, without replacing the plugin model and without preventing cross-cluster contracts and events.",
+      "status": "draft",
+      "priority": "medium",
+      "effort": "medium",
+      "depends_on": [
+        "C-001"
+      ],
+      "acceptance": [
+        "A cluster groups multiple plugins and is itself a unit the registry validates.",
+        "A cluster can declare meaningful relationships over its members (for example a shared capability or a declared dependency), and those relationships are validated before anything operates.",
+        "A plugin in one cluster can resolve a contract and consume an event provided by a plugin in another cluster, with no direct import between the clusters.",
+        "An invalid cluster declaration is rejected deterministically and does not start.",
+        "Clusters do not change the single-plugin lifecycle; a plugin's behaviour with or without a cluster is identical.",
+        "Evidence: tests covering a valid cluster, a cross-cluster contract and event exchange, and an invalid cluster, with recorded output."
+      ],
+      "sources": [
+        {
+          "note": "Section 16",
+          "ref": "atlas-sdk-contract-user-29-09-2026",
+          "type": "user"
+        }
+      ],
+      "skills": [],
+      "capabilities": [],
+      "gates": [
+        "test",
+        "architecture"
+      ],
+      "worker": null,
+      "evidence": [],
+      "blocked_question": null,
+      "attempts": 0,
+      "commit_refs": [],
+      "execution_notes": [],
+      "revision": 1,
+      "created_at": "2026-09-29T15:54:39.075Z",
+      "updated_at": "2026-09-29T15:54:39.075Z"
+    }
+  ]
+}

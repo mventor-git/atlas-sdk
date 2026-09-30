@@ -1,0 +1,406 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opencode.local/schema/contract.schema.json",
+  "title": "Project Contract",
+  "description": "Durable project scope plus execution state. Current truth lives in .contract/contract.json; history lives in .contract/events.jsonl.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "contract_id",
+    "title",
+    "status",
+    "revision",
+    "created_at",
+    "updated_at",
+    "items"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "contract_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "vision": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "non_goals": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "active",
+        "completed",
+        "cancelled"
+      ]
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "authored_by": {
+      "type": "string",
+      "description": "Actor class that authored this contract; validated against field_ownership.scope."
+    },
+    "execution_owner": {
+      "type": "string",
+      "description": "Actor class that executes this contract, from the harness ownership model."
+    },
+    "change_orders": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/change_order"
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item"
+      }
+    }
+  },
+  "$defs": {
+    "item_id": {
+      "type": "string",
+      "pattern": "^C-[0-9]{3,}$"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "type",
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "file",
+            "url",
+            "decision",
+            "user",
+            "research",
+            "contract"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "kind",
+        "ref",
+        "recorded_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "test",
+            "command",
+            "diff",
+            "file",
+            "review",
+            "security",
+            "api",
+            "perf",
+            "visual",
+            "report"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "description",
+        "status",
+        "priority",
+        "effort",
+        "depends_on",
+        "acceptance",
+        "sources",
+        "skills",
+        "capabilities",
+        "gates",
+        "worker",
+        "evidence",
+        "blocked_question",
+        "attempts",
+        "commit_refs",
+        "execution_notes",
+        "revision",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/item_id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 8000
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "ready",
+            "in_progress",
+            "verification",
+            "accepted",
+            "rejected",
+            "blocked",
+            "cancelled"
+          ]
+        },
+        "priority": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "effort": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/item_id"
+          },
+          "uniqueItems": true
+        },
+        "acceptance": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "gates": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "test",
+              "review",
+              "security",
+              "api",
+              "visual",
+              "architecture",
+              "reality-check"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "worker": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "blocked_question": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "commit_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "execution_notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "change_order": {
+      "type": "object",
+      "required": [
+        "id",
+        "status",
+        "requested_by",
+        "reason",
+        "proposal",
+        "created_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^CO-[0-9]{3,}$"
+        },
+        "status": {
+          "enum": [
+            "proposed",
+            "approved",
+            "rejected",
+            "applied"
+          ]
+        },
+        "item_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/item_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requested_by": {
+          "type": "string",
+          "description": "Actor class that raised the change order."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "proposal": {
+          "type": "object",
+          "description": "Field-level amendment: { target_item_id|null, field, value }. Applied only on approval.",
+          "required": [
+            "field",
+            "value"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "target_item_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/item_id"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "field": {
+              "type": "string"
+            },
+            "value": {}
+          }
+        },
+        "decided_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "decided_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}
