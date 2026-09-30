@@ -16,9 +16,9 @@
     "Prescribing names for future applications, products or deployments. The SDK must stay useful independent of any product identity."
   ],
   "status": "active",
-  "revision": 7,
+  "revision": 9,
   "created_at": "2026-09-29T15:53:10.565Z",
-  "updated_at": "2026-09-29T16:02:06.557Z",
+  "updated_at": "2026-09-30T12:49:39.705Z",
   "authored_by": "CRAKEN",
   "execution_owner": "MVENTOR",
   "change_orders": [],
@@ -27,7 +27,7 @@
       "id": "C-001",
       "title": "Fundamental loop, in Rust",
       "description": "A Rust implementation of the Atlas-SDK fundamental loop, end to end, in one host process. Proves the architecture before any infrastructure is added. This is the only eligible item; C-002, C-003 and C-004 are gated behind it.",
-      "status": "ready",
+      "status": "in_progress",
       "priority": "high",
       "effort": "high",
       "depends_on": [],
@@ -68,12 +68,14 @@
       "worker": null,
       "evidence": [],
       "blocked_question": null,
-      "attempts": 0,
+      "attempts": 1,
       "commit_refs": [],
-      "execution_notes": [],
-      "revision": 2,
+      "execution_notes": [
+        "2026-09-30T12:49:39.705Z MVENTOR: Worker: senior-developer (depth 1), implements the crate. Mventor retains verification, evidence, and acceptance. Constraints passed down: std-only (no serde/tokio/async), single crate, hand-rolled minimal Value type for payloads, plugin boundary via trait + boxed handler so dependency direction is provable by compiler rather than by convention."
+      ],
+      "revision": 4,
       "created_at": "2026-09-29T15:53:41.555Z",
-      "updated_at": "2026-09-29T16:02:06.557Z"
+      "updated_at": "2026-09-30T12:49:39.705Z"
     },
     {
       "id": "C-002",

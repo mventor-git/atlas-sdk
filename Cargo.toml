@@ -1,0 +1,21 @@
+[package]
+name = "atlas-sdk"
+version = "0.1.0"
+edition = "2021"
+description = "General-purpose application runtime and plugin platform. Proves the fundamental loop."
+publish = false
+
+[dependencies]
+# Intentionally empty. std only. No async, no serde, no framework.
+# See README "Why no dependencies".
+
+[lib]
+name = "atlas_sdk"
+path = "src/lib.rs"
+
+[[bin]]
+name = "atlas-host"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 2
